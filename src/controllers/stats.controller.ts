@@ -5,10 +5,13 @@ import { Schedule } from '../models/Schedule.model';
 import { Payment } from '../models/Payment.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 
+const getTargetId = (req: AuthRequest): string => req.targetUserId || req.userId!;
+
 // GET /api/stats/study
 export const getStudyStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const records = await Attendance.find({ userId: req.userId });
+    const targetId = getTargetId(req);
+    const records = await Attendance.find({ userId: targetId });
     const stats = {
       total: records.length,
       completed: records.filter(r => r.status === 'COMPLETED').length,
@@ -28,11 +31,12 @@ export const getStudyStats = async (req: AuthRequest, res: Response): Promise<vo
 // GET /api/stats/weekly
 export const getWeeklyStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const startOfWeek = dayjs().startOf('week').toDate();
     const endOfWeek = dayjs().endOf('week').toDate();
 
     const records = await Attendance.find({
-      userId: req.userId,
+      userId: targetId,
       date: { $gte: startOfWeek, $lte: endOfWeek },
     });
 
@@ -53,6 +57,7 @@ export const getWeeklyStats = async (req: AuthRequest, res: Response): Promise<v
 // GET /api/stats/monthly?month=9&year=2026
 export const getMonthlyStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const month = parseInt(req.query.month as string) || dayjs().month() + 1;
     const year = parseInt(req.query.year as string) || dayjs().year();
 
@@ -60,7 +65,7 @@ export const getMonthlyStats = async (req: AuthRequest, res: Response): Promise<
     const end = dayjs(`${year}-${month}-01`).endOf('month').toDate();
 
     const records = await Attendance.find({
-      userId: req.userId,
+      userId: targetId,
       date: { $gte: start, $lte: end },
     }).populate({
       path: 'scheduleId',
@@ -93,7 +98,8 @@ export const getMonthlyStats = async (req: AuthRequest, res: Response): Promise<
 // GET /api/stats/tuition
 export const getTuitionStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const payments = await Payment.find({ userId: req.userId }).populate({
+    const targetId = getTargetId(req);
+    const payments = await Payment.find({ userId: targetId }).populate({
       path: 'scheduleId',
       populate: { path: 'subjectId', select: 'name color' },
     });

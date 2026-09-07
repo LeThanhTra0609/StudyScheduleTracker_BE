@@ -22,17 +22,34 @@ const seedData = async () => {
       Payment.deleteMany({}),
     ]);
 
-    console.log('👤 Creating sample user...');
+    console.log('👤 Creating sample users (Student & Parent)...');
     const passwordHash = await bcrypt.hash('123456', 12);
     const user = await User.create({
-      name: 'Nguyen Van A',
+      name: 'Nguyễn Văn A (Học sinh)',
       email: 'demo@example.com',
       passwordHash,
+      role: 'STUDENT',
+      linkCode: 'STU-DEMO01',
       notificationPreferences: {
         reminderTimes: [15, 30],
         emailNotifications: false,
       },
     });
+
+    const parentUser = await User.create({
+      name: 'Nguyễn Văn B (Phụ huynh)',
+      email: 'parent@example.com',
+      passwordHash,
+      role: 'PARENT',
+      children: [user._id],
+      notificationPreferences: {
+        reminderTimes: [15, 30],
+        emailNotifications: false,
+      },
+    });
+
+    user.parents = [parentUser._id];
+    await user.save();
 
     console.log('📚 Creating sample subjects...');
     const [subMobile, subSE, subEng] = await Subject.insertMany([
@@ -146,9 +163,11 @@ const seedData = async () => {
     await Payment.create({
       userId: user._id,
       scheduleId: schedExtra._id,
+      subjectId: schedExtra.subjectId,
       periodLabel: `Tháng ${today.format('MM/YYYY')}`,
       periodStart: today.startOf('month').toDate(),
       periodEnd: today.endOf('month').toDate(),
+      dueDate: today.add(5, 'day').toDate(),
       totalSessions: 8,
       totalAmount: 1200000,
       paidAmount: 600000,
@@ -165,8 +184,12 @@ const seedData = async () => {
     });
 
     console.log('✨ Seed completed successfully!');
-    console.log('👉 Demo account:');
+    console.log('👉 Student account:');
     console.log('   Email:    demo@example.com');
+    console.log('   Password: 123456');
+    console.log('   LinkCode: STU-DEMO01');
+    console.log('👉 Parent account:');
+    console.log('   Email:    parent@example.com');
     console.log('   Password: 123456');
     process.exit(0);
   } catch (error) {

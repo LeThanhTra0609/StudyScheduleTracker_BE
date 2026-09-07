@@ -10,6 +10,7 @@ import scheduleRoutes from './routes/schedule.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import paymentRoutes from './routes/payment.routes';
 import statsRoutes from './routes/stats.routes';
+import userRoutes from './routes/user.routes';
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.get('/api/health', (_req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/schedules', scheduleRoutes);

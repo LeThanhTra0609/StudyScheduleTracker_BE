@@ -2,9 +2,12 @@ import { Response } from 'express';
 import { Subject } from '../models/Subject.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 
+const getTargetId = (req: AuthRequest): string => req.targetUserId || req.userId!;
+
 export const getSubjects = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const subjects = await Subject.find({ userId: req.userId }).sort({ name: 1 });
+    const targetId = getTargetId(req);
+    const subjects = await Subject.find({ userId: targetId }).sort({ name: 1 });
     res.json({ success: true, data: subjects });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error });
@@ -13,7 +16,8 @@ export const getSubjects = async (req: AuthRequest, res: Response): Promise<void
 
 export const createSubject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const subject = await Subject.create({ ...req.body, userId: req.userId });
+    const targetId = getTargetId(req);
+    const subject = await Subject.create({ ...req.body, userId: targetId });
     res.status(201).json({ success: true, data: subject });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error });
@@ -22,8 +26,9 @@ export const createSubject = async (req: AuthRequest, res: Response): Promise<vo
 
 export const updateSubject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const subject = await Subject.findOneAndUpdate(
-      { _id: req.params.id, userId: req.userId },
+      { _id: req.params.id, userId: targetId },
       req.body,
       { new: true, runValidators: true }
     );
@@ -39,7 +44,8 @@ export const updateSubject = async (req: AuthRequest, res: Response): Promise<vo
 
 export const deleteSubject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const subject = await Subject.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    const targetId = getTargetId(req);
+    const subject = await Subject.findOneAndDelete({ _id: req.params.id, userId: targetId });
     if (!subject) {
       res.status(404).json({ success: false, message: 'Subject not found' });
       return;

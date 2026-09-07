@@ -11,10 +11,14 @@ export interface ITransaction {
 
 export interface IPayment extends Document {
   userId: mongoose.Types.ObjectId;
-  scheduleId: mongoose.Types.ObjectId;
+  scheduleId?: mongoose.Types.ObjectId;
+  subjectId?: mongoose.Types.ObjectId;
   periodLabel: string;     // "Tháng 9/2026"
   periodStart?: Date;
   periodEnd?: Date;
+  dueDate?: Date;          // Hạn nộp học phí
+  paidAt?: Date;           // Thời điểm đánh dấu đã nộp
+  notes?: string;
   totalSessions: number;
   totalAmount: number;
   paidAmount: number;
@@ -38,10 +42,14 @@ const TransactionSchema = new Schema<ITransaction>(
 const PaymentSchema = new Schema<IPayment>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    scheduleId: { type: Schema.Types.ObjectId, ref: 'Schedule', required: true, index: true },
+    scheduleId: { type: Schema.Types.ObjectId, ref: 'Schedule', index: true },
+    subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', index: true },
     periodLabel: { type: String, required: true },
     periodStart: { type: Date },
     periodEnd: { type: Date },
+    dueDate: { type: Date, index: true },
+    paidAt: { type: Date },
+    notes: { type: String },
     totalSessions: { type: Number, default: 0 },
     totalAmount: { type: Number, default: 0 },
     paidAmount: { type: Number, default: 0 },

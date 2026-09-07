@@ -14,11 +14,14 @@ const calcDuration = (start: string, end: string): number => {
   return (eh * 60 + em) - (sh * 60 + sm);
 };
 
+const getTargetId = (req: AuthRequest): string => req.targetUserId || req.userId!;
+
 // GET /api/schedules
 export const getSchedules = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { date, type, status, subjectId, startDate, endDate } = req.query;
-    const filter: Record<string, unknown> = { userId: req.userId };
+    const targetId = getTargetId(req);
+    const filter: Record<string, unknown> = { userId: targetId };
 
     if (date) filter.date = new Date(date as string);
     if (type) filter.type = type;
@@ -47,9 +50,10 @@ export const getTodaySchedules = async (req: AuthRequest, res: Response): Promis
   try {
     const today = dayjs().startOf('day').toDate();
     const tomorrow = dayjs().endOf('day').toDate();
+    const targetId = getTargetId(req);
 
     const schedules = await Schedule.find({
-      userId: req.userId,
+      userId: targetId,
       date: { $gte: today, $lte: tomorrow },
     })
       .populate('subjectId', 'name color code')
@@ -66,8 +70,9 @@ export const getTodaySchedules = async (req: AuthRequest, res: Response): Promis
 export const getUpcomingSchedules = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const now = new Date();
+    const targetId = getTargetId(req);
     const schedules = await Schedule.find({
-      userId: req.userId,
+      userId: targetId,
       date: { $gte: now },
       status: 'UPCOMING',
     })
@@ -86,9 +91,10 @@ export const getUpcomingSchedules = async (req: AuthRequest, res: Response): Pro
 export const checkConflict = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { date, startTime, endTime, excludeId } = req.query;
+    const targetId = getTargetId(req);
 
     const filter: Record<string, unknown> = {
-      userId: req.userId,
+      userId: targetId,
       date: new Date(date as string),
       status: { $nin: ['CANCELLED'] },
       $or: [
@@ -111,7 +117,8 @@ export const checkConflict = async (req: AuthRequest, res: Response): Promise<vo
 // GET /api/schedules/:id
 export const getScheduleById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const schedule = await Schedule.findOne({ _id: req.params.id, userId: req.userId })
+    const targetId = getTargetId(req);
+    const schedule = await Schedule.findOne({ _id: req.params.id, userId: targetId })
       .populate('subjectId')
       .populate('locationId');
 
@@ -128,6 +135,7 @@ export const getScheduleById = async (req: AuthRequest, res: Response): Promise<
 // POST /api/schedules
 export const createSchedule = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const { isRecurring, recurringDays, recurringEndDate, recurringStartDate, ...scheduleData } = req.body;
 
     if (isRecurring && recurringDays?.length) {
@@ -142,7 +150,7 @@ export const createSchedule = async (req: AuthRequest, res: Response): Promise<v
         if (recurringDays.includes(current.day())) {
           instances.push({
             ...scheduleData,
-            userId: req.userId,
+            userId: targetId,
             date: current.toDate(),
             isRecurring: true,
             recurringGroupId: groupId,
@@ -156,7 +164,7 @@ export const createSchedule = async (req: AuthRequest, res: Response): Promise<v
       const created = await Schedule.insertMany(instances);
       res.status(201).json({ success: true, data: created, count: created.length });
     } else {
-      const schedule = await Schedule.create({ ...scheduleData, userId: req.userId, status: 'UPCOMING' });
+      const schedule = await Schedule.create({ ...scheduleData, userId: targetId, status: 'UPCOMING' });
       res.status(201).json({ success: true, data: schedule });
     }
   } catch (error) {
@@ -167,8 +175,9 @@ export const createSchedule = async (req: AuthRequest, res: Response): Promise<v
 // PUT /api/schedules/:id
 export const updateSchedule = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const schedule = await Schedule.findOneAndUpdate(
-      { _id: req.params.id, userId: req.userId },
+      { _id: req.params.id, userId: targetId },
       req.body,
       { new: true, runValidators: true }
     ).populate('subjectId', 'name color').populate('locationId', 'name');
@@ -178,7 +187,10 @@ export const updateSchedule = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    emitToUser(io, req.userId!, 'schedule:updated', { scheduleId: schedule._id, action: 'updated', schedule });
+    emitToUser(io, targetId, 'schedule:updated', { scheduleId: schedule._id, action: 'updated', schedule });
+    if (req.userId && req.userId !== targetId) {
+      emitToUser(io, req.userId, 'schedule:updated', { scheduleId: schedule._id, action: 'updated', schedule });
+    }
     res.json({ success: true, data: schedule });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error });
@@ -188,12 +200,16 @@ export const updateSchedule = async (req: AuthRequest, res: Response): Promise<v
 // DELETE /api/schedules/:id
 export const deleteSchedule = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const schedule = await Schedule.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    const targetId = getTargetId(req);
+    const schedule = await Schedule.findOneAndDelete({ _id: req.params.id, userId: targetId });
     if (!schedule) {
       res.status(404).json({ success: false, message: 'Schedule not found' });
       return;
     }
-    emitToUser(io, req.userId!, 'schedule:updated', { scheduleId: schedule._id, action: 'deleted' });
+    emitToUser(io, targetId, 'schedule:updated', { scheduleId: schedule._id, action: 'deleted' });
+    if (req.userId && req.userId !== targetId) {
+      emitToUser(io, req.userId, 'schedule:updated', { scheduleId: schedule._id, action: 'deleted' });
+    }
     res.json({ success: true, message: 'Schedule deleted' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error });
@@ -203,9 +219,10 @@ export const deleteSchedule = async (req: AuthRequest, res: Response): Promise<v
 // DELETE /api/schedules/recurring/:groupId
 export const deleteRecurringSeries = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const result = await Schedule.deleteMany({
       recurringGroupId: req.params.groupId,
-      userId: req.userId,
+      userId: targetId,
     });
     res.json({ success: true, message: `Deleted ${result.deletedCount} schedules` });
   } catch (error) {
@@ -216,8 +233,9 @@ export const deleteRecurringSeries = async (req: AuthRequest, res: Response): Pr
 // PATCH /api/schedules/:id/attendance
 export const markAttendance = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const { status, notes } = req.body;
-    const schedule = await Schedule.findOne({ _id: req.params.id, userId: req.userId });
+    const schedule = await Schedule.findOne({ _id: req.params.id, userId: targetId });
 
     if (!schedule) {
       res.status(404).json({ success: false, message: 'Schedule not found' });
@@ -234,7 +252,7 @@ export const markAttendance = async (req: AuthRequest, res: Response): Promise<v
       { scheduleId: schedule._id, date: schedule.date },
       {
         scheduleId: schedule._id,
-        userId: req.userId,
+        userId: targetId,
         date: schedule.date,
         status,
         durationMinutes: status === 'COMPLETED' ? durationMinutes : 0,
@@ -244,18 +262,25 @@ export const markAttendance = async (req: AuthRequest, res: Response): Promise<v
       { upsert: true, new: true }
     );
 
-    // Emit real-time event
-    emitToUser(io, req.userId!, 'attendance:marked', {
+    // Emit real-time events
+    emitToUser(io, targetId, 'attendance:marked', {
       scheduleId: schedule._id,
       status,
       attendance,
     });
-
-    emitToUser(io, req.userId!, 'notification:new', {
+    emitToUser(io, targetId, 'notification:new', {
       type: 'attendance',
       message: `Đã đánh dấu buổi học là "${status}"`,
       scheduleId: schedule._id,
     });
+
+    if (req.userId && req.userId !== targetId) {
+      emitToUser(io, req.userId, 'attendance:marked', {
+        scheduleId: schedule._id,
+        status,
+        attendance,
+      });
+    }
 
     res.json({ success: true, data: { schedule, attendance } });
   } catch (error) {

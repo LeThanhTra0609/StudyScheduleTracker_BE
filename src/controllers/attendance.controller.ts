@@ -3,11 +3,14 @@ import { Attendance } from '../models/Attendance.model';
 import { Schedule } from '../models/Schedule.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 
+const getTargetId = (req: AuthRequest): string => req.targetUserId || req.userId!;
+
 // GET /api/attendance
 export const getAttendance = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const { subjectId, startDate, endDate, status } = req.query;
-    const filter: Record<string, unknown> = { userId: req.userId };
+    const filter: Record<string, unknown> = { userId: targetId };
 
     if (status) filter.status = status;
     if (startDate || endDate) {
@@ -18,7 +21,7 @@ export const getAttendance = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     if (subjectId) {
-      const scheduleIds = await Schedule.find({ userId: req.userId, subjectId: subjectId as string }).distinct('_id');
+      const scheduleIds = await Schedule.find({ userId: targetId, subjectId: subjectId as string }).distinct('_id');
       filter.scheduleId = { $in: scheduleIds };
     }
 
@@ -38,8 +41,9 @@ export const getAttendance = async (req: AuthRequest, res: Response): Promise<vo
 // GET /api/attendance/history
 export const getHistory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const records = await Attendance.find({
-      userId: req.userId,
+      userId: targetId,
       status: { $ne: 'UPCOMING' },
     })
       .populate({
@@ -59,10 +63,11 @@ export const getHistory = async (req: AuthRequest, res: Response): Promise<void>
 // GET /api/attendance/stats/:scheduleId (for recurring group / single schedule)
 export const getClassStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const targetId = getTargetId(req);
     const { scheduleId } = req.params;
 
     // Find all schedules in same recurring group or just this schedule
-    const schedule = await Schedule.findOne({ _id: scheduleId, userId: req.userId });
+    const schedule = await Schedule.findOne({ _id: scheduleId, userId: targetId });
     if (!schedule) {
       res.status(404).json({ success: false, message: 'Schedule not found' });
       return;

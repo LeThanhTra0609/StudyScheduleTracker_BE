@@ -9,9 +9,18 @@ import { AuthRequest } from '../middleware/auth.middleware';
 const signToken = (userId: string): string =>
   jwt.sign({ userId }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions);
 
+export const generateLinkCode = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'STU-';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
 
     if (!name || !email || !password) {
       res.status(400).json({ success: false, message: 'Name, email and password are required' });
@@ -24,14 +33,42 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    const userRole = role === 'PARENT' ? 'PARENT' : 'STUDENT';
+    let linkCode: string | undefined = undefined;
+
+    if (userRole === 'STUDENT') {
+      let isUnique = false;
+      while (!isUnique) {
+        linkCode = generateLinkCode();
+        const existingCode = await User.findOne({ linkCode });
+        if (!existingCode) isUnique = true;
+      }
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ name, email, passwordHash });
+    const user = await User.create({
+      name,
+      email,
+      passwordHash,
+      role: userRole,
+      linkCode,
+      children: [],
+      parents: [],
+    });
+
     const token = signToken(user._id.toString());
 
     res.status(201).json({
       success: true,
       token,
-      user: { _id: user._id, name: user.name, email: user.email },
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        linkCode: user.linkCode,
+        children: [],
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error });
@@ -47,7 +84,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).populate('children', '_id name email avatar linkCode');
     if (!user || !(await user.comparePassword(password))) {
       res.status(401).json({ success: false, message: 'Invalid email or password' });
       return;
@@ -57,7 +94,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.json({
       success: true,
       token,
-      user: { _id: user._id, name: user.name, email: user.email, avatar: user.avatar },
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        role: user.role,
+        linkCode: user.linkCode,
+        children: user.children,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error });
@@ -124,7 +169,9 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 
 export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const user = await User.findById(req.userId).select('-passwordHash -resetPasswordToken -resetPasswordExpires');
+    const user = await User.findById(req.userId)
+      .select('-passwordHash -resetPasswordToken -resetPasswordExpires')
+      .populate('children', '_id name email avatar linkCode');
     res.json({ success: true, user });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error });
