@@ -4,6 +4,7 @@ import app from './app';
 import { connectDB } from './config/db';
 import { env } from './config/env';
 import { initSocketHandlers } from './socket/socket.handler';
+import { initCronJobs } from './services/cron.service';
 
 const httpServer = http.createServer(app);
 
@@ -21,6 +22,7 @@ initSocketHandlers(io);
 // Boot
 const start = async (): Promise<void> => {
   await connectDB();
+  initCronJobs();
   httpServer.listen(env.PORT, () => {
     console.log(`🚀 Server running on http://localhost:${env.PORT}`);
     console.log(`🌍 Environment: ${env.NODE_ENV}`);
