@@ -180,10 +180,10 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
 
 export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { name, avatar, notificationPreferences } = req.body;
+    const { name, avatar, phone, bio, notificationPreferences } = req.body;
     const user = await User.findByIdAndUpdate(
       req.userId,
-      { name, avatar, notificationPreferences },
+      { name, avatar, phone, bio, notificationPreferences },
       { new: true, runValidators: true }
     ).select('-passwordHash');
 

@@ -11,6 +11,7 @@ import attendanceRoutes from './routes/attendance.routes';
 import paymentRoutes from './routes/payment.routes';
 import statsRoutes from './routes/stats.routes';
 import userRoutes from './routes/user.routes';
+import notificationRoutes from './routes/notification.routes';
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/schedules', scheduleRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use((_req, res) => {

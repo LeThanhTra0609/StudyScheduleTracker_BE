@@ -6,6 +6,7 @@ import { Attendance } from '../models/Attendance.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { io } from '../server';
 import { emitToUser } from '../socket/socket.handler';
+import { notifyStudentAndParents } from '../services/notification.service';
 
 // Helper: calculate duration in minutes from "HH:mm" strings
 const calcDuration = (start: string, end: string): number => {
@@ -268,11 +269,30 @@ export const markAttendance = async (req: AuthRequest, res: Response): Promise<v
       status,
       attendance,
     });
-    emitToUser(io, targetId, 'notification:new', {
-      type: 'attendance',
-      message: `Đã đánh dấu buổi học là "${status}"`,
-      scheduleId: schedule._id,
-    });
+
+    const subjectName = (schedule.subjectId as any)?.name || 'buổi học';
+    const statusTextMap: Record<string, string> = {
+      COMPLETED: 'Có mặt',
+      ABSENT: 'Vắng mặt',
+      EXCUSED: 'Có phép',
+      CANCELLED: 'Đã hủy',
+    };
+    const readableStatus = statusTextMap[status] || status;
+
+    await notifyStudentAndParents(
+      targetId,
+      {
+        title: `Điểm danh môn ${subjectName}`,
+        message: `Buổi học ngày ${dayjs(schedule.date).format('DD/MM/YYYY')} (${schedule.startTime}) đã được điểm danh: ${readableStatus}.`,
+        type: 'attendance',
+        link: '/attendance',
+        metadata: { scheduleId: schedule._id.toString(), status },
+      },
+      (parentName, studentName) => ({
+        title: `Điểm danh: Học sinh ${studentName}`,
+        message: `Buổi học môn ${subjectName} ngày ${dayjs(schedule.date).format('DD/MM/YYYY')} của ${studentName} đã được điểm danh: ${readableStatus}.`,
+      })
+    );
 
     if (req.userId && req.userId !== targetId) {
       emitToUser(io, req.userId, 'attendance:marked', {
