@@ -8,6 +8,8 @@ export interface IUser extends Document {
   email: string;
   passwordHash: string;
   avatar?: string;
+  phone?: string;
+  bio?: string;
   role: UserRole;
   linkCode?: string;
   children: mongoose.Types.ObjectId[];
@@ -15,6 +17,15 @@ export interface IUser extends Document {
   notificationPreferences: {
     reminderTimes: number[]; // minutes before class
     emailNotifications: boolean;
+    classReminder?: boolean;
+    dailyReminder?: boolean;
+    dailyReminderTime?: string;
+    advanceDayReminder?: boolean;
+    advanceDayReminderTime?: string;
+    attendanceAlerts?: boolean;
+    scheduleChangeAlerts?: boolean;
+    paymentDueAlerts?: boolean;
+    soundEnabled?: boolean;
   };
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
@@ -29,6 +40,8 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     avatar: { type: String },
+    phone: { type: String, trim: true },
+    bio: { type: String, trim: true },
     role: { type: String, enum: ['PARENT', 'STUDENT'], default: 'STUDENT' },
     linkCode: { type: String, unique: true, sparse: true, trim: true },
     children: [{ type: Schema.Types.ObjectId, ref: 'User' }],
@@ -36,6 +49,15 @@ const UserSchema = new Schema<IUser>(
     notificationPreferences: {
       reminderTimes: { type: [Number], default: [30] },
       emailNotifications: { type: Boolean, default: false },
+      classReminder: { type: Boolean, default: true },
+      dailyReminder: { type: Boolean, default: true },
+      dailyReminderTime: { type: String, default: '07:00' },
+      advanceDayReminder: { type: Boolean, default: true },
+      advanceDayReminderTime: { type: String, default: '20:00' },
+      attendanceAlerts: { type: Boolean, default: true },
+      scheduleChangeAlerts: { type: Boolean, default: true },
+      paymentDueAlerts: { type: Boolean, default: true },
+      soundEnabled: { type: Boolean, default: true },
     },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
