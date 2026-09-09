@@ -3,6 +3,7 @@ import { User } from '../models/User.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { io } from '../server';
 import { emitToUser } from '../socket/socket.handler';
+import { createAndSendNotification } from '../services/notification.service';
 
 // POST /api/users/link-child
 // Body: { linkCode: string }
@@ -54,10 +55,13 @@ export const linkChild = async (req: AuthRequest, res: Response): Promise<void> 
       await student.save();
     }
 
-    // Socket notification to student
-    emitToUser(io, student._id.toString(), 'notification:new', {
-      type: 'system',
+    // Save notification and send Web Push to student
+    await createAndSendNotification({
+      userId: student._id.toString(),
+      title: 'Kết nối gia đình mới',
       message: `Phụ huynh "${parent.name}" đã liên kết với tài khoản của bạn!`,
+      type: 'family',
+      link: '/settings',
     });
 
     // Return populated children

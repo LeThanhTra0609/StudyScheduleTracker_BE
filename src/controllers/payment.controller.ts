@@ -3,6 +3,7 @@ import { Payment } from '../models/Payment.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { io } from '../server';
 import { emitToUser } from '../socket/socket.handler';
+import { createAndSendNotification } from '../services/notification.service';
 
 const getTargetId = (req: AuthRequest): string => req.targetUserId || req.userId!;
 
@@ -163,11 +164,14 @@ export const togglePaymentStatus = async (req: AuthRequest, res: Response): Prom
       status: payment.status,
     });
 
-    emitToUser(io, targetId, 'notification:new', {
-      type: 'payment',
+    await createAndSendNotification({
+      userId: targetId,
+      title: 'Cập nhật học phí',
       message: wasPaid
         ? `Đã đánh dấu Chưa nộp cho khoản "${payment.periodLabel}"`
         : `Đã đánh dấu Đã nộp thành công cho khoản "${payment.periodLabel}"`,
+      type: 'payment',
+      link: '/payments',
     });
 
     if (req.userId && req.userId !== targetId) {
@@ -230,9 +234,12 @@ export const addTransaction = async (req: AuthRequest, res: Response): Promise<v
       status: payment.status,
     });
 
-    emitToUser(io, targetId, 'notification:new', {
+    await createAndSendNotification({
+      userId: targetId,
+      title: 'Xác nhận nộp học phí',
+      message: `Đã ghi nhận thanh toán ${amount.toLocaleString('vi-VN')} VND cho khoản "${payment.periodLabel}"`,
       type: 'payment',
-      message: `Đã ghi nhận thanh toán ${amount.toLocaleString('vi-VN')} VND`,
+      link: '/payments',
     });
 
     if (req.userId && req.userId !== targetId) {
