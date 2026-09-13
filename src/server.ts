@@ -8,10 +8,23 @@ import { initCronJobs } from './services/cron.service';
 
 const httpServer = http.createServer(app);
 
-// Socket.IO setup
+// Socket.IO setup – allow same origins as Express CORS
+const socketOrigins = [
+  env.CLIENT_URL,
+  /^https:\/\/.*\.vercel\.app$/,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+
 export const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: env.CLIENT_URL,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const isAllowed = socketOrigins.some((allowed) =>
+        allowed instanceof RegExp ? allowed.test(origin) : allowed === origin
+      );
+      callback(isAllowed ? null : new Error('Socket.IO CORS blocked'), isAllowed);
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },

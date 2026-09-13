@@ -1,0 +1,29 @@
+# Render.com deployment configuration
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: study-schedule-tracker-api
+    runtime: node
+    region: singapore   # closest to Vietnam
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false   # Set manually in Render dashboard
+      - key: JWT_SECRET
+        sync: false   # Set manually in Render dashboard
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: CLIENT_URL
+        sync: false   # Set to your Vercel URL after frontend deploy
+      - key: VAPID_PUBLIC_KEY
+        sync: false   # Set manually in Render dashboard
+      - key: VAPID_PRIVATE_KEY
+        sync: false   # Set manually in Render dashboard
+      - key: VAPID_SUBJECT
+        sync: false   # e.g. mailto:your-email@example.com
