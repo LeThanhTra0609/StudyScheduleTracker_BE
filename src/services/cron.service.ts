@@ -1,14 +1,21 @@
 import cron from 'node-cron';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import { Schedule } from '../models/Schedule.model';
 import { User, IUser } from '../models/User.model';
 import { createAndSendNotification, notifyStudentAndParents } from './notification.service';
+
+// Configure dayjs with Vietnam timezone (UTC+7)
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const VN_TZ = 'Asia/Ho_Chi_Minh';
 
 // In-memory cache to prevent duplicate alerts within the same day
 const sentAlertsCache = new Set<string>();
 
 /**
- * Clean up alert cache at midnight every day
+ * Clean up alert cache at midnight every day (VN time)
  */
 const cleanupCacheJob = (): void => {
   cron.schedule('0 0 * * *', () => {
@@ -19,11 +26,12 @@ const cleanupCacheJob = (): void => {
 
 /**
  * 1. Check upcoming classes every minute
- * Checks schedules starting in X minutes matching each user's reminderTimes preference
+ * Checks schedules starting in X minutes matching each user's reminderTimes preference.
+ * Uses a 2-minute window to tolerate cron delays / server restarts.
  */
 const checkUpcomingClasses = async (): Promise<void> => {
   try {
-    const now = dayjs();
+    const now = dayjs().tz(VN_TZ);
     const todayStart = now.startOf('day').toDate();
     const todayEnd = now.endOf('day').toDate();
     const currentMinuteOfDay = now.hour() * 60 + now.minute();
@@ -57,9 +65,10 @@ const checkUpcomingClasses = async (): Promise<void> => {
         ? prefs.reminderTimes
         : [30];
 
-      // Check if current minutes remaining matches one of the user's preferred reminder intervals
+      // Use a 2-minute window to tolerate cron delays or server restarts
+      // e.g. if targetM=30, fire if minutesRemaining is between 30 and 31 (inclusive)
       for (const targetM of reminderTimes) {
-        if (minutesRemaining === targetM) {
+        if (minutesRemaining >= targetM && minutesRemaining < targetM + 2) {
           const cacheKey = `reminder_${schedule._id}_${targetM}_${dateStr}`;
           if (sentAlertsCache.has(cacheKey)) continue;
           sentAlertsCache.add(cacheKey);
@@ -83,6 +92,8 @@ const checkUpcomingClasses = async (): Promise<void> => {
                 minutesBefore: minutesRemaining,
                 subjectName,
                 startTime: schedule.startTime,
+                // Flag for SW: reminder that needs requireInteraction
+                urgent: minutesRemaining <= 15,
               },
             },
             (parentName, studentName) => ({
@@ -90,6 +101,8 @@ const checkUpcomingClasses = async (): Promise<void> => {
               message: `Học sinh ${studentName} có buổi học môn ${subjectName} sau ${minutesRemaining} phút nữa (${schedule.startTime} - ${schedule.endTime})${locName}.`,
             })
           );
+
+          console.log(`[Cron] ✅ Reminder sent: ${subjectName} in ${minutesRemaining}min for user ${user._id}`);
         }
       }
     }
@@ -99,11 +112,11 @@ const checkUpcomingClasses = async (): Promise<void> => {
 };
 
 /**
- * 2. Check Daily Morning Briefing (default 07:00)
+ * 2. Check Daily Morning Briefing (default 07:00 VN time)
  */
 const checkDailyBriefing = async (): Promise<void> => {
   try {
-    const now = dayjs();
+    const now = dayjs().tz(VN_TZ);
     const currentTimeStr = now.format('HH:mm');
     const dateStr = now.format('YYYY-MM-DD');
     const todayStart = now.startOf('day').toDate();
@@ -152,6 +165,8 @@ const checkDailyBriefing = async (): Promise<void> => {
           link: `/calendar?date=${dateStr}`,
           metadata: { count: todaySchedules.length, date: dateStr },
         });
+
+        console.log(`[Cron] ✅ Daily briefing sent to user ${user._id}: ${todaySchedules.length} classes`);
       }
     }
   } catch (error) {
@@ -160,11 +175,11 @@ const checkDailyBriefing = async (): Promise<void> => {
 };
 
 /**
- * 3. Check Advance Evening Reminder (default 20:00)
+ * 3. Check Advance Evening Reminder (default 20:00 VN time)
  */
 const checkAdvanceEveningReminder = async (): Promise<void> => {
   try {
-    const now = dayjs();
+    const now = dayjs().tz(VN_TZ);
     const currentTimeStr = now.format('HH:mm');
     const dateStr = now.format('YYYY-MM-DD');
     const tomorrow = now.add(1, 'day');
@@ -211,6 +226,8 @@ const checkAdvanceEveningReminder = async (): Promise<void> => {
           link: `/calendar?date=${tomorrowDateStr}`,
           metadata: { count: tomorrowSchedules.length, date: tomorrowDateStr },
         });
+
+        console.log(`[Cron] ✅ Evening advance sent to user ${user._id}: ${tomorrowSchedules.length} classes tomorrow`);
       }
     }
   } catch (error) {
@@ -222,7 +239,7 @@ const checkAdvanceEveningReminder = async (): Promise<void> => {
  * Initialize all automated Cron jobs
  */
 export const initCronJobs = (): void => {
-  console.log('⏰ Initializing Study Schedule Notification Cron Engine...');
+  console.log('⏰ Initializing Study Schedule Notification Cron Engine (Timezone: Asia/Ho_Chi_Minh)...');
 
   cleanupCacheJob();
 

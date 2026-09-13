@@ -15,13 +15,41 @@ export interface PushPayload {
   icon?: string;
   badge?: string;
   tag?: string;
+  image?: string;
+  requireInteraction?: boolean;
   data?: {
     url?: string;
     [key: string]: unknown;
   };
+  actions?: Array<{ action: string; title: string; icon?: string }>;
 }
 
 export const getVapidPublicKey = (): string => env.VAPID_PUBLIC_KEY;
+
+/**
+ * Build the full notification payload string for push delivery
+ */
+const buildPayloadString = (payload: PushPayload): string => {
+  const isUrgent = payload.requireInteraction === true;
+
+  return JSON.stringify({
+    title: payload.title,
+    body: payload.body,
+    icon: payload.icon || '/pwa-192.png',
+    badge: payload.badge || '/pwa-192.png',
+    tag: payload.tag || `notif-${Date.now()}`,
+    image: payload.image,
+    requireInteraction: isUrgent,
+    vibrate: isUrgent ? [300, 100, 300, 100, 300] : [200, 100, 200],
+    data: payload.data || { url: '/' },
+    actions: payload.actions || [
+      { action: 'open', title: '📅 Xem lịch học' },
+      { action: 'dismiss', title: 'Bỏ qua' },
+    ],
+    // Timestamp for accurate time display in notification center
+    timestamp: Date.now(),
+  });
+};
 
 /**
  * Send Web Push notification to all active devices of a user
@@ -33,17 +61,11 @@ export const sendPushToUser = async (
   try {
     const subscriptions = await PushSubscription.find({ userId });
     if (!subscriptions || subscriptions.length === 0) {
+      console.log(`[WebPush] No push subscriptions found for user ${userId}`);
       return { sent: 0, failed: 0 };
     }
 
-    const payloadString = JSON.stringify({
-      title: payload.title,
-      body: payload.body,
-      icon: payload.icon || '/icons.svg',
-      badge: payload.badge || '/favicon.svg',
-      tag: payload.tag || `notif-${Date.now()}`,
-      data: payload.data || { url: '/' },
-    });
+    const payloadString = buildPayloadString(payload);
 
     let sent = 0;
     let failed = 0;
@@ -59,9 +81,14 @@ export const sendPushToUser = async (
                 auth: sub.keys.auth,
               },
             },
-            payloadString
+            payloadString,
+            {
+              TTL: 86400, // Keep push alive for 24h if device is offline
+              urgency: payload.requireInteraction ? 'high' : 'normal',
+            }
           );
           sent++;
+          console.log(`[WebPush] ✅ Push sent to subscription ${sub._id} for user ${userId}`);
         } catch (error: any) {
           failed++;
           // If subscription is expired or unsubscribed, remove from DB
@@ -75,6 +102,7 @@ export const sendPushToUser = async (
       })
     );
 
+    console.log(`[WebPush] User ${userId}: ${sent} sent, ${failed} failed`);
     return { sent, failed };
   } catch (error) {
     console.error(`[WebPush] sendPushToUser error:`, error);
@@ -90,16 +118,11 @@ export const sendPushToSubscription = async (
   payload: PushPayload
 ): Promise<boolean> => {
   try {
-    const payloadString = JSON.stringify({
-      title: payload.title,
-      body: payload.body,
-      icon: payload.icon || '/icons.svg',
-      badge: payload.badge || '/favicon.svg',
-      tag: payload.tag || `test-${Date.now()}`,
-      data: payload.data || { url: '/' },
+    const payloadString = buildPayloadString(payload);
+    await webpush.sendNotification(subscription, payloadString, {
+      TTL: 3600,
+      urgency: 'high',
     });
-
-    await webpush.sendNotification(subscription, payloadString);
     return true;
   } catch (error) {
     console.error(`[WebPush] sendPushToSubscription error:`, error);
