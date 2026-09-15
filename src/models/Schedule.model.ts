@@ -86,7 +86,9 @@ const ScheduleSchema = new Schema<ISchedule>(
   { timestamps: true }
 );
 
-// Compound index for conflict detection
+// Compound indexes for conflict detection, calendar queries & status filtering
 ScheduleSchema.index({ userId: 1, date: 1, startTime: 1, endTime: 1 });
+ScheduleSchema.index({ userId: 1, date: -1 });
+ScheduleSchema.index({ userId: 1, status: 1, date: 1 });
 
 export const Schedule = mongoose.model<ISchedule>('Schedule', ScheduleSchema);

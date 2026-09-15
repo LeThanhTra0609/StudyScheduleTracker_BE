@@ -37,7 +37,9 @@ const NotificationSchema = new Schema<INotification>(
   { timestamps: true }
 );
 
-// Compound index for querying user notifications sorted by time
+// Compound indexes for fast filtered & sorted notification queries
 NotificationSchema.index({ userId: 1, createdAt: -1 });
+NotificationSchema.index({ userId: 1, read: 1, createdAt: -1 });
+NotificationSchema.index({ createdAt: 1 });
 
 export const Notification = mongoose.model<INotification>('Notification', NotificationSchema);

@@ -6,6 +6,7 @@ import { Schedule } from '../models/Schedule.model';
 import { User, IUser } from '../models/User.model';
 import { createAndSendNotification, notifyStudentAndParents } from './notification.service';
 import { SentPushLog } from '../models/SentPushLog.model';
+import { runDataMaintenance } from './dataRetention.service';
 
 // Configure dayjs with Vietnam timezone (UTC+7)
 dayjs.extend(utc);
@@ -294,6 +295,9 @@ export const initCronJobs = (): void => {
 
   cleanupCacheJob();
 
+  // Run initial data maintenance check at startup
+  runDataMaintenance().catch((err) => console.error('[Cron] Initial data maintenance error:', err));
+
   // Run every minute: * * * * *
   cron.schedule('* * * * *', async () => {
     await checkUpcomingClasses();
@@ -301,5 +305,11 @@ export const initCronJobs = (): void => {
     await checkAdvanceEveningReminder();
   });
 
-  console.log('✅ Cron Engine active: Scanning upcoming classes and daily briefs every minute.');
+  // Run data retention maintenance daily at 03:00 AM VN time (0 3 * * *)
+  cron.schedule('0 3 * * *', async () => {
+    console.log('[Cron] 🧹 Running scheduled daily data maintenance (03:00 AM)...');
+    await runDataMaintenance();
+  });
+
+  console.log('✅ Cron Engine active: Scanning upcoming classes every minute & Daily data maintenance at 03:00 AM.');
 };
