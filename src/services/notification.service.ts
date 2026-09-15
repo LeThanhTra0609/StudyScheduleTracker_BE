@@ -63,14 +63,30 @@ export const createAndSendNotification = async (
 
   // 3. Send Web Push if enabled (default true)
   if (params.sendPush !== false) {
+    const isUrgentReminder = params.type === 'reminder';
+    const urgentMinutes = typeof params.metadata?.minutesBefore === 'number'
+      ? params.metadata.minutesBefore as number
+      : null;
+    // Reminders ≤15 min before class → requireInteraction (stays on screen until tapped)
+    const requireInteraction = isUrgentReminder && (urgentMinutes === null || urgentMinutes <= 15);
+
     const pushPayload: PushPayload = {
       title: params.title,
       body: params.message,
+      requireInteraction,
       data: {
         url: params.link || '/calendar',
         notificationId: notification._id.toString(),
         type: params.type,
+        urgent: requireInteraction,
+        scheduleId: params.metadata?.scheduleId as string | undefined,
       },
+      actions: isUrgentReminder
+        ? [
+            { action: 'open', title: '📅 Xem lịch học' },
+            { action: 'dismiss', title: 'Bỏ qua' },
+          ]
+        : undefined,
     };
     sendPushToUser(userIdStr, pushPayload).catch((err) => {
       console.error(`[NotificationService] Push delivery failed for user ${userIdStr}:`, err);

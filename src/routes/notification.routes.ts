@@ -14,7 +14,10 @@ import {
 
 const router = Router();
 
-// All notification routes require authentication
+// Public endpoint (no auth needed for Service Worker or unauthenticated handshake)
+router.get('/vapid-public-key', getVapidKey);
+
+// All other notification routes require authentication
 router.use(authenticate);
 
 router.get('/', getNotifications);
@@ -23,8 +26,7 @@ router.patch('/:id/read', markNotificationRead);
 router.delete('/clear-all', clearAllNotifications);
 router.delete('/:id', deleteNotification);
 
-// Web Push endpoints
-router.get('/vapid-public-key', getVapidKey);
+// Web Push endpoints (authenticated)
 router.post('/push-subscribe', subscribePush);
 router.post('/push-unsubscribe', unsubscribePush);
 router.post('/test-push', testPushNotification);
