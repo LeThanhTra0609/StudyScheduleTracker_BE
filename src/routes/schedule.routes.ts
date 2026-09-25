@@ -9,6 +9,7 @@ import {
   updateSchedule,
   deleteSchedule,
   deleteRecurringSeries,
+  deletePastSchedules,
   markAttendance,
 } from '../controllers/schedule.controller';
 import { authenticate } from '../middleware/auth.middleware';
@@ -23,6 +24,7 @@ router.get('/conflict-check', checkConflict);
 router.get('/:id', getScheduleById);
 router.post('/', createSchedule);
 router.put('/:id', updateSchedule);
+router.delete('/past', deletePastSchedules);
 router.delete('/recurring/:groupId', deleteRecurringSeries);
 router.delete('/:id', deleteSchedule);
 router.patch('/:id/attendance', markAttendance);
