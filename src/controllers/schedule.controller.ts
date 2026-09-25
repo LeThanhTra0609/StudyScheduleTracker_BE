@@ -24,14 +24,20 @@ export const getSchedules = async (req: AuthRequest, res: Response): Promise<voi
     const targetId = getTargetId(req);
     const filter: Record<string, unknown> = { userId: targetId };
 
-    if (date) filter.date = new Date(date as string);
+    if (date) {
+      const d = dayjs(date as string);
+      filter.date = {
+        $gte: d.startOf('day').toDate(),
+        $lte: d.endOf('day').toDate(),
+      };
+    }
     if (type) filter.type = type;
     if (status) filter.status = status;
     if (subjectId) filter.subjectId = subjectId;
     if (startDate || endDate) {
       filter.date = {
-        ...(startDate && { $gte: new Date(startDate as string) }),
-        ...(endDate && { $lte: new Date(endDate as string) }),
+        ...(startDate && { $gte: dayjs(startDate as string).startOf('day').toDate() }),
+        ...(endDate && { $lte: dayjs(endDate as string).endOf('day').toDate() }),
       };
     }
 
@@ -94,9 +100,10 @@ export const checkConflict = async (req: AuthRequest, res: Response): Promise<vo
     const { date, startTime, endTime, excludeId } = req.query;
     const targetId = getTargetId(req);
 
+    const d = dayjs(date as string);
     const filter: Record<string, unknown> = {
       userId: targetId,
-      date: new Date(date as string),
+      date: { $gte: d.startOf('day').toDate(), $lte: d.endOf('day').toDate() },
       status: { $nin: ['CANCELLED'] },
       $or: [
         // New schedule starts during an existing one
@@ -140,10 +147,34 @@ export const createSchedule = async (req: AuthRequest, res: Response): Promise<v
     const { isRecurring, recurringDays, recurringEndDate, recurringStartDate, ...scheduleData } = req.body;
 
     if (isRecurring && recurringDays?.length) {
-      // Bulk create instances for each occurrence
-      const groupId = new mongoose.Types.ObjectId();
+      // Validate required recurring fields
+      if (!recurringEndDate) {
+        res.status(400).json({ success: false, message: 'Vui lòng chọn ngày kết thúc lặp lại' });
+        return;
+      }
+
       const start = dayjs(recurringStartDate || scheduleData.date);
       const end = dayjs(recurringEndDate);
+
+      if (!start.isValid() || !end.isValid()) {
+        res.status(400).json({ success: false, message: 'Ngày bắt đầu hoặc ngày kết thúc không hợp lệ' });
+        return;
+      }
+
+      if (end.isBefore(start, 'day')) {
+        res.status(400).json({ success: false, message: 'Ngày kết thúc lặp phải sau ngày bắt đầu' });
+        return;
+      }
+
+      // Safety: limit to max 365 days to prevent excessive inserts
+      const diffDays = end.diff(start, 'day');
+      if (diffDays > 365) {
+        res.status(400).json({ success: false, message: 'Khoảng thời gian lặp không được quá 365 ngày' });
+        return;
+      }
+
+      // Bulk create instances for each occurrence
+      const groupId = new mongoose.Types.ObjectId();
       const instances = [];
       let current = start;
 
@@ -160,6 +191,11 @@ export const createSchedule = async (req: AuthRequest, res: Response): Promise<v
           });
         }
         current = current.add(1, 'day');
+      }
+
+      if (instances.length === 0) {
+        res.status(400).json({ success: false, message: 'Không có ngày nào khớp với lịch lặp. Hãy kiểm tra lại ngày trong tuần đã chọn.' });
+        return;
       }
 
       const created = await Schedule.insertMany(instances);
@@ -226,6 +262,21 @@ export const deleteRecurringSeries = async (req: AuthRequest, res: Response): Pr
       userId: targetId,
     });
     res.json({ success: true, message: `Deleted ${result.deletedCount} schedules` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error });
+  }
+};
+
+// DELETE /api/schedules/past  — xóa tất cả lịch trước hôm nay
+export const deletePastSchedules = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const targetId = getTargetId(req);
+    const todayStart = dayjs().startOf('day').toDate();
+    const result = await Schedule.deleteMany({
+      userId: targetId,
+      date: { $lt: todayStart },
+    });
+    res.json({ success: true, deletedCount: result.deletedCount, message: `Đã xóa ${result.deletedCount} lịch học quá khứ` });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error });
   }
